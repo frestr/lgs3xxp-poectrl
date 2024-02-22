@@ -86,12 +86,25 @@ class LoginSession:
                 )
                 return requests.Session.send(self, *a, **kw)
 
-        url = f"https://{self.ip}/csd90d7adf/config/device/wcd"
-        session = CurlyBracesSession()
-        response = session.get(url, params="{EncryptionSetting}", verify=False)
+        cached_key_path = f"cache/{self.ip}.pem"
+        try:
+            with open(cached_key_path, "r") as f:
+                pem_key = f.read()
+            log.info(f"Using cached RSA key from {cached_key_path}")
+        except FileNotFoundError:
+            log.info("No cached RSA key found. Will query switch instead.")
 
-        bs = BeautifulSoup(response.text, features="xml")
-        pem_key = bs.rsaPublicKey.string
+            url = f"https://{self.ip}/csd90d7adf/config/device/wcd"
+            session = CurlyBracesSession()
+            response = session.get(url, params="{EncryptionSetting}", verify=False)
+
+            bs = BeautifulSoup(response.text, features="xml")
+            pem_key = bs.rsaPublicKey.string
+
+            with open(cached_key_path, "w") as f:
+                f.write(pem_key)
+            log.info(f"Stored key at {cached_key_path}")
+
         return RSA.importKey(pem_key)
 
 
