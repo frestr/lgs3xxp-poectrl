@@ -1,0 +1,7 @@
+ip: 192.168.1.173
+username: admin2
+password: foobar
+labels:
+  1: "foo"
+  2: "bar"
+  3: "baz"

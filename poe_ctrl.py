@@ -7,6 +7,7 @@ import time
 import urllib
 
 import requests
+import yaml
 from bs4 import BeautifulSoup
 from Crypto.Cipher import PKCS1_v1_5
 from Crypto.PublicKey import RSA
@@ -99,16 +100,26 @@ class PoeManager:
         self.ip = ip
         self.session = session
 
-    def print_status(self):
+    def print_status(self, labels={}):
         status = self._get_status()
 
         def print_line(lst):
             print(str("{:<20}" * len(lst)).format(*lst))
 
-        columns = ("Port Num", "PoE Status", "Power Consumption", "Operational Status")
+        columns = (
+            "Port Num",
+            "PoE Status",
+            "Power Consumption",
+            "Operational Status",
+            "Label",
+        )
         print_line(columns)
         for entry in status:
-            print_line(entry.values())
+            vals = [entry[c] for c in columns if c in entry]
+            idx = int(entry["Port Num"])
+            if idx in labels:
+                vals.append(labels[idx])
+            print_line(vals)
 
     def enable_port(self, index):
         log.info(f"Enabling port {index}")
@@ -158,9 +169,9 @@ class PoeManager:
                         "1": "Disabled",
                         "2": "Searching",
                         "3": "Delivering Power",
-                        "4": "Fault",
+                        "4": "Powering Up",
                         "5": "Test",
-                        "6": "Other Fault",
+                        "6": "Fault",
                     }[find_poe_val(bs, "pethPsePortDetectionStatus", index)]
                 ),
             }
@@ -252,9 +263,27 @@ def main():
             format="%(levelname)s: %(message)s", level=log.DEBUG, force=True
         )
 
-    ip = "192.168.1.173"
-    username = "admin2"
-    password = "foobar"
+    config_path = "config.yaml"
+    try:
+        with open(config_path) as f:
+            try:
+                config = yaml.safe_load(f)
+            except yaml.YAMLError:
+                log.error("Unable to parse YAML config")
+                raise
+    except FileNotFoundError:
+        log.error(f"Couldn't read config file at {config_path}")
+        return 1
+
+    try:
+        ip = config["ip"]
+        username = config["username"]
+        password = config["password"]
+    except KeyError as e:
+        log.error(f"Config is missing required parameter: {e}")
+        return 1
+
+    labels = config["labels"] if "labels" in config else {}
 
     if not switch_reachable(ip):
         return 1
@@ -270,13 +299,11 @@ def main():
             manager.disable_port(p)
         elif args.cycle:
             manager.disable_port(p)
-            time.sleep(1)
+            time.sleep(5)
             manager.enable_port(p)
 
         if args.status:
-            if args.enable or args.disable or args.cycle:
-                time.sleep(1)
-            manager.print_status()
+            manager.print_status(labels)
 
     return 0
 
