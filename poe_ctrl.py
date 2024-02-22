@@ -3,6 +3,7 @@
 import argparse
 import logging as log
 import sys
+import time
 import urllib
 
 import requests
@@ -108,17 +109,16 @@ class PoeManager:
         print_line(columns)
         for entry in status:
             print_line(entry.values())
-        print()
-
-    def disable_port(self, index):
-        log.info(f"Disabling port {index}")
-        self._set_port_state(index, False)
-        log.info("Disabled")
 
     def enable_port(self, index):
         log.info(f"Enabling port {index}")
         self._set_port_state(index, True)
         log.info("Enabled")
+
+    def disable_port(self, index):
+        log.info(f"Disabling port {index}")
+        self._set_port_state(index, False)
+        log.info("Disabled")
 
     def _get_status(self):
         url = f"https://{self.ip}/csd90d7adf/poe/system_poe_interface_m.htm?[pethPsePortTableVT]Filter:(pethPsePortGroupIndex=1)&&(ifOperStatus!=6)&&(rlPethPsePortSupportPoe!=2)"
@@ -198,18 +198,59 @@ def switch_reachable(ip):
 
 def main():
     parser = argparse.ArgumentParser(
-        prog="ProgramName",
-        description="What the program does",
-        epilog="Text at the bottom of help",
+        prog="poe_ctrl",
+        description="Remotely manage the state of PoE ports on a LGS308P switch",
     )
-    parser.add_argument("-v", "--verbose", action="store_true")  # on/off flag
+    parser.add_argument("-v", "--verbose", action="store_true", help="Verbose output")
+    parser.add_argument(
+        "-s",
+        "--status",
+        action="store_true",
+        help="Print current status of PoE ports. If provided together with -e|-d|-c, will print status after update.",
+    )
+    parser.add_argument(
+        "-p",
+        "--port",
+        dest="port",
+        action="store",
+        metavar="PORT",
+        type=int,
+        help="The port to operate on.",
+    )
+    group = parser.add_mutually_exclusive_group()
+    group.add_argument(
+        "-e",
+        "--enable",
+        action="store_true",
+        help="Enable power on the specified port",
+    )
+    group.add_argument(
+        "-d",
+        "--disable",
+        action="store_true",
+        help="Disable power on the specified port",
+    )
+    group.add_argument(
+        "-c",
+        "--cycle",
+        action="store_true",
+        help="Power cycle the specified port",
+    )
     args = parser.parse_args()
+    if not (args.status or args.port):
+        parser.print_help()
+        return 1
 
+    if args.port and not (args.enable or args.disable or args.cycle):
+        parser.error("Port action must be provided")
+    if (args.enable or args.disable or args.cycle) and not args.port:
+        parser.error("Port must be provided")
+
+    log.basicConfig(format="%(levelname)s: %(message)s")
     if args.verbose:
-        log.basicConfig(format="%(levelname)s: %(message)s", level=log.DEBUG)
-        log.info("Verbose output.")
-    else:
-        log.basicConfig(format="%(levelname)s: %(message)s")
+        log.basicConfig(
+            format="%(levelname)s: %(message)s", level=log.DEBUG, force=True
+        )
 
     ip = "192.168.1.173"
     username = "admin2"
@@ -220,11 +261,22 @@ def main():
 
     with LoginSession(ip, username, password) as session:
         manager = PoeManager(ip, session)
-        manager.print_status()
-        manager.disable_port(3)
-        manager.print_status()
-        manager.enable_port(3)
-        manager.print_status()
+
+        p = args.port
+
+        if args.enable:
+            manager.enable_port(p)
+        elif args.disable:
+            manager.disable_port(p)
+        elif args.cycle:
+            manager.disable_port(p)
+            time.sleep(1)
+            manager.enable_port(p)
+
+        if args.status:
+            if args.enable or args.disable or args.cycle:
+                time.sleep(1)
+            manager.print_status()
 
     return 0
 
