@@ -4,6 +4,7 @@ import argparse
 import logging as log
 import subprocess
 import sys
+import urllib
 
 import requests
 import urllib3
@@ -15,24 +16,26 @@ from urllib3.exceptions import InsecureRequestWarning
 
 
 def get_rsa_key(ip):
-    # Would ideally use the requests lib here but I couldn't get it to NOT
-    # escape curly braces in the url, which curl is able to handle with the
-    # --globoff option.
-    url = f"https://{ip}/csd90d7adf/config/device/wcd?{{EncryptionSetting}}"
-    result = subprocess.run(
-        ["curl", "--globoff", "--insecure", url],
-        check=False,
-        capture_output=True,
-        text=True,
-    )
 
-    # Switch web server is quite janky and doesn't seem to close the connection
-    # properly, leading to a 56 error for curl even though the data was
-    # received successfully.
-    if result.returncode not in [0, 56]:
-        raise Exception("curl failed")
+    class CurlyBracesSession(requests.Session):
+        def __init__(self):
+            super().__init__()
+            requests.urllib3.util.url.QUERY_CHARS.add("{")
+            requests.urllib3.util.url.QUERY_CHARS.add("}")
 
-    s = BeautifulSoup(result.stdout, features="xml")
+        def send(self, *a, **kw):
+            a[0].url = (
+                a[0]
+                .url.replace(urllib.parse.quote("{"), "{")
+                .replace(urllib.parse.quote("}"), "}")
+            )
+            return requests.Session.send(self, *a, **kw)
+
+    url = f"https://{ip}/csd90d7adf/config/device/wcd"
+    session = CurlyBracesSession()
+    response = session.get(url, params="{EncryptionSetting}", verify=False)
+
+    s = BeautifulSoup(response.text, features="xml")
     pem_key = s.rsaPublicKey.string
     return RSA.importKey(pem_key)
 
@@ -81,15 +84,14 @@ def login(ip, username, password):
 
 
 def get_poe_status(ip, cookies):
-    cookie = f"sessionID={cookies['sessionID']}"
     url = f"https://{ip}/csd90d7adf/poe/system_poe_interface_m.htm?[pethPsePortTableVT]Filter:(pethPsePortGroupIndex=1)&&(ifOperStatus!=6)&&(rlPethPsePortSupportPoe!=2)"
-    result = subprocess.run(
-        ["curl", "--globoff", "--insecure", url, "-H", f"Cookie: {cookie}"],
-        check=False,
-        capture_output=True,
-        text=True,
+    response = requests.get(
+        url,
+        cookies=cookies,
+        verify=False,
     )
-    s = BeautifulSoup(result.stdout, features="lxml")
+
+    s = BeautifulSoup(response.text, features="lxml")
 
     def find_poe_val(s, label, idx):
         return s.find(
@@ -112,9 +114,14 @@ def get_poe_status(ip, cookies):
             ),
             "Power Consumption": find_poe_val(s, "rlPethPsePortOutputPower", idx),
             "Operational Status": (
-                {"1": "Disabled", "2": "Searching", "3": "Delivering Power"}[
-                    find_poe_val(s, "pethPsePortDetectionStatus", idx)
-                ]
+                {
+                    "1": "Disabled",
+                    "2": "Searching",
+                    "3": "Delivering Power",
+                    "4": "Fault",
+                    "5": "Test",
+                    "6": "Other Fault",
+                }[find_poe_val(s, "pethPsePortDetectionStatus", idx)]
             ),
         }
         poe_status.append(port_status)
@@ -147,20 +154,12 @@ def set_port_status(ip, cookies, port_idx, enabled):
     url = f"https://{ip}/csd90d7adf/poe/system_poe_interface_e.htm"
     backend_idx = 48 + port_idx
     data = f"restoreUrl=[pethPsePortTableVT]Filter:(rlPethPsePortSupportPoe+!=+2)^Query:pethPsePortGroupIndex=1@pethPsePortIndex={backend_idx}&errorCollector=&rlPethPsePortTimeRangeName$VT=Type=100;Access=2;NumOfEnumerations=0;Range0=[0,32];Default+value=&rlPethPsePortSupportPoePlus$VT=Type=0;Access=1;NumOfEnumerations=2;Range0=[1,2];Default+value=1&pethPsePortTableVT$query=OK&pethPsePortGroupIndex$query=1&pethPsePortIndex$query={backend_idx}&pethPsePortAdminEnable$query={query_value}&rlPethPsePortTimeRangeName$query=&rlPethPsePortSupportPoePlus$query=1&pethPsePortTableVT$endQuery=OK"
-    result = subprocess.run(
-        [
-            "curl",
-            "--globoff",
-            "--insecure",
-            url,
-            "-H",
-            f"Cookie: {cookie}",
-            "--data-raw",
-            data,
-        ],
-        check=False,
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
+
+    response = requests.post(
+        url,
+        cookies=cookies,
+        verify=False,
+        data=data,
     )
 
 
