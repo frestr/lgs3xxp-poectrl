@@ -22,8 +22,8 @@ class LoginException(Exception):
 
 
 class LoginSession:
-    def __init__(self, ip, username, password):
-        self.ip = ip
+    def __init__(self, hostname, username, password):
+        self.hostname = hostname
         self.username = username
         self.password = password
         self.session = requests.Session()
@@ -56,7 +56,7 @@ class LoginSession:
         }
 
         log.info("Sending login request")
-        url = f"https://{self.ip}/csd90d7adf/config/System.xml"
+        url = f"https://{self.hostname}/csd90d7adf/config/System.xml"
         response = self.session.get(
             url,
             params=params,
@@ -68,7 +68,7 @@ class LoginSession:
             raise LoginException()
 
     def _logout(self):
-        url = f"https://{self.ip}/csd90d7adf/config/logOff_message.htm"
+        url = f"https://{self.hostname}/csd90d7adf/config/logOff_message.htm"
         response = self.session.get(
             url,
             verify=False,
@@ -92,7 +92,9 @@ class LoginSession:
                 )
                 return requests.Session.send(self, *a, **kw)
 
-        cached_key_path = os.path.join(os.getenv("HOME"), ".cache", f"{self.ip}.pem")
+        cached_key_path = os.path.join(
+            os.getenv("HOME"), ".cache", f"{self.hostname}.pem"
+        )
         try:
             with open(cached_key_path, "r") as f:
                 pem_key = f.read()
@@ -100,7 +102,7 @@ class LoginSession:
         except FileNotFoundError:
             log.info("No cached RSA key found. Will query switch instead.")
 
-            url = f"https://{self.ip}/csd90d7adf/config/device/wcd"
+            url = f"https://{self.hostname}/csd90d7adf/config/device/wcd"
             session = CurlyBracesSession()
             response = session.get(url, params="{EncryptionSetting}", verify=False)
 
@@ -117,8 +119,8 @@ class LoginSession:
 
 
 class PoeManager:
-    def __init__(self, ip, session):
-        self.ip = ip
+    def __init__(self, hostname, session):
+        self.hostname = hostname
         self.session = session
 
     def print_status(self, labels={}):
@@ -154,7 +156,7 @@ class PoeManager:
         log.info("Disabled")
 
     def _get_status(self):
-        url = f"https://{self.ip}/csd90d7adf/poe/system_poe_interface_m.htm?[pethPsePortTableVT]Filter:(pethPsePortGroupIndex=1)&&(ifOperStatus!=6)&&(rlPethPsePortSupportPoe!=2)"
+        url = f"https://{self.hostname}/csd90d7adf/poe/system_poe_interface_m.htm?[pethPsePortTableVT]Filter:(pethPsePortGroupIndex=1)&&(ifOperStatus!=6)&&(rlPethPsePortSupportPoe!=2)"
         response = self.session.get(
             url,
             verify=False,
@@ -202,7 +204,7 @@ class PoeManager:
     def _set_port_state(self, index, enabled):
         query_value = "1" if enabled else "2"
 
-        url = f"https://{self.ip}/csd90d7adf/poe/system_poe_interface_e.htm"
+        url = f"https://{self.hostname}/csd90d7adf/poe/system_poe_interface_e.htm"
         backend_index = 48 + index
         data = f"restoreUrl=[pethPsePortTableVT]Filter:(rlPethPsePortSupportPoe+!=+2)^Query:pethPsePortGroupIndex=1@pethPsePortIndex={backend_index}&errorCollector=&rlPethPsePortTimeRangeName$VT=Type=100;Access=2;NumOfEnumerations=0;Range0=[0,32];Default+value=&rlPethPsePortSupportPoePlus$VT=Type=0;Access=1;NumOfEnumerations=2;Range0=[1,2];Default+value=1&pethPsePortTableVT$query=OK&pethPsePortGroupIndex$query=1&pethPsePortIndex$query={backend_index}&pethPsePortAdminEnable$query={query_value}&rlPethPsePortTimeRangeName$query=&rlPethPsePortSupportPoePlus$query=1&pethPsePortTableVT$endQuery=OK"
 
@@ -213,77 +215,21 @@ class PoeManager:
         )
 
 
-def switch_reachable(ip):
+def switch_reachable(hostname):
     # Disable warnings about self-signed https certificate (not something we can change)
     requests.packages.urllib3.disable_warnings(category=InsecureRequestWarning)
     try:
         response = requests.get(
-            f"https://{ip}/csd90d7adf/config/log_off_page.htm",
+            f"https://{hostname}/csd90d7adf/config/log_off_page.htm",
             verify=False,
         )
     except requests.exceptions.ConnectionError:
-        log.error(f"Switch ({ip}) is unreachable")
+        log.error(f"Switch ({hostname}) is unreachable")
         return False
     return True
 
 
-def main():
-    parser = argparse.ArgumentParser(
-        prog="poe_ctrl",
-        description="Remotely manage the state of PoE ports on a LGS308P switch",
-    )
-    parser.add_argument("-v", "--verbose", action="store_true", help="Verbose output")
-    parser.add_argument(
-        "-s",
-        "--status",
-        action="store_true",
-        help="Print current status of PoE ports. If provided together with -e|-d|-c, will print status after update.",
-    )
-    parser.add_argument(
-        "-p",
-        "--port",
-        dest="port",
-        action="store",
-        metavar="PORT",
-        type=int,
-        help="The port to operate on.",
-    )
-    group = parser.add_mutually_exclusive_group()
-    group.add_argument(
-        "-e",
-        "--enable",
-        action="store_true",
-        help="Enable power on the specified port",
-    )
-    group.add_argument(
-        "-d",
-        "--disable",
-        action="store_true",
-        help="Disable power on the specified port",
-    )
-    group.add_argument(
-        "-c",
-        "--cycle",
-        action="store_true",
-        help="Power cycle the specified port",
-    )
-    args = parser.parse_args()
-    if not (args.status or args.port):
-        parser.print_help()
-        return 1
-
-    if args.port and not (args.enable or args.disable or args.cycle):
-        parser.error("Port action must be provided")
-    if (args.enable or args.disable or args.cycle) and not args.port:
-        parser.error("Port must be provided")
-
-    log.basicConfig(format="%(levelname)s: %(message)s")
-    if args.verbose:
-        log.basicConfig(
-            format="%(levelname)s: %(message)s", level=log.DEBUG, force=True
-        )
-
-    config_path = os.path.join(os.getenv("HOME"), ".config", "poe_ctrl", "config.yaml")
+def load_config(config_path):
     try:
         with open(config_path, "r") as f:
             try:
@@ -295,7 +241,7 @@ def main():
         pathlib.Path(os.path.dirname(config_path)).mkdir(parents=True, exist_ok=True)
         with open(config_path, "w") as f:
             f.write(
-                "#ip: 192.168.0.1\n"
+                "#hostname: 192.168.0.1\n"
                 "#username: admin\n"
                 "#password: admin\n"
                 "#labels:\n"
@@ -309,14 +255,97 @@ def main():
         log.error(
             f"Please update {config_path} with your switch's info and re-run this program."
         )
-        return 1
+        raise
 
     if not config:
         log.error("Invalid config")
+        return Exception()
+    return config
+
+
+def main():
+    # Define CLI arguments
+    parser = argparse.ArgumentParser(
+        prog="poe_ctrl",
+        description="Remotely manage the state of PoE ports on a LGS308P switch",
+    )
+    parser.add_argument("-v", "--verbose", action="store_true", help="Verbose output")
+    parser.add_argument(
+        "-s",
+        "--status",
+        action="store_true",
+        help="Print current status of PoE ports. If provided together with -e|-d|-c, will print status after update.",
+    )
+    port_group = parser.add_mutually_exclusive_group()
+    port_group.add_argument(
+        "-p",
+        "--port",
+        dest="port_num",
+        action="store",
+        metavar="PORT_NUM",
+        type=int,
+        help="Number of the port to operate on.",
+    )
+    port_group.add_argument(
+        "-l",
+        "--label",
+        dest="port_label",
+        action="store",
+        metavar="PORT_LABEL",
+        type=str,
+        help="Label of the port to operate on",
+    )
+    action_group = parser.add_mutually_exclusive_group()
+    action_group.add_argument(
+        "-e",
+        "--enable",
+        action="store_true",
+        help="Enable power on the specified port",
+    )
+    action_group.add_argument(
+        "-d",
+        "--disable",
+        action="store_true",
+        help="Disable power on the specified port",
+    )
+    action_group.add_argument(
+        "-c",
+        "--cycle",
+        action="store_true",
+        help="Power cycle the specified port",
+    )
+
+    # Validate CLI arguments
+    args = parser.parse_args()
+    if not (args.status or args.port):
+        parser.print_help()
+        return 1
+
+    if (args.port_num or args.port_label) and not (
+        args.enable or args.disable or args.cycle
+    ):
+        parser.error("Port action must be provided")
+    if (args.enable or args.disable or args.cycle) and not (
+        args.port_num or args.port_label
+    ):
+        parser.error("Port number or label must be provided")
+
+    # Set logging
+    log.basicConfig(format="%(levelname)s: %(message)s")
+    if args.verbose:
+        log.basicConfig(
+            format="%(levelname)s: %(message)s", level=log.DEBUG, force=True
+        )
+
+    # Read config
+    config_path = os.path.join(os.getenv("HOME"), ".config", "poe_ctrl", "config.yaml")
+    try:
+        config = load_config(config_path)
+    except Exception:
         return 1
 
     try:
-        ip = config["ip"]
+        hostname = config["hostname"]
         username = config["username"]
         password = config["password"]
     except KeyError as e:
@@ -325,23 +354,42 @@ def main():
 
     labels = config["labels"] if "labels" in config else {}
 
-    if not switch_reachable(ip):
+    # Validate specified label
+    if args.port_label:
+        if args.port_label not in labels.values():
+            log.error("Specified port label is not in config")
+            return 1
+        if list(labels.values()).count(args.port_label) != 1:
+            log.error(
+                "More than one port has the specified label. "
+                "Please specify a port number instead."
+            )
+            return 1
+
+    # Determine port number
+    port_num = (
+        list(labels.keys())[list(labels.values()).index(args.port_label)]
+        if args.port_label
+        else args.port_num
+    )
+
+    # Sanity check before continuinf
+    if not switch_reachable(hostname):
         return 1
 
+    # Login and process action
     try:
-        with LoginSession(ip, username, password) as session:
-            manager = PoeManager(ip, session)
-
-            p = args.port
+        with LoginSession(hostname, username, password) as session:
+            manager = PoeManager(hostname, session)
 
             if args.enable:
-                manager.enable_port(p)
+                manager.enable_port(port_num)
             elif args.disable:
-                manager.disable_port(p)
+                manager.disable_port(port_num)
             elif args.cycle:
-                manager.disable_port(p)
+                manager.disable_port(port_num)
                 time.sleep(5)
-                manager.enable_port(p)
+                manager.enable_port(port_num)
 
             if args.status:
                 manager.print_status(labels)
