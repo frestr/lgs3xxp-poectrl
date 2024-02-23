@@ -2,6 +2,8 @@
 
 import argparse
 import logging as log
+import os
+import pathlib
 import sys
 import time
 import urllib
@@ -13,6 +15,10 @@ from Crypto.Cipher import PKCS1_v1_5
 from Crypto.PublicKey import RSA
 from Crypto.Random import random
 from urllib3.exceptions import InsecureRequestWarning
+
+
+class LoginException(Exception):
+    pass
 
 
 class LoginSession:
@@ -59,7 +65,7 @@ class LoginSession:
 
         bs = BeautifulSoup(response.text, features="xml")
         if bs.statusString.string != "OK":
-            raise Exception("login failed")
+            raise LoginException()
 
     def _logout(self):
         url = f"https://{self.ip}/csd90d7adf/config/logOff_message.htm"
@@ -86,7 +92,7 @@ class LoginSession:
                 )
                 return requests.Session.send(self, *a, **kw)
 
-        cached_key_path = f"cache/{self.ip}.pem"
+        cached_key_path = os.path.join(os.getenv("HOME"), ".cache", f"{self.ip}.pem")
         try:
             with open(cached_key_path, "r") as f:
                 pem_key = f.read()
@@ -100,7 +106,9 @@ class LoginSession:
 
             bs = BeautifulSoup(response.text, features="xml")
             pem_key = bs.rsaPublicKey.string
-
+            pathlib.Path(os.path.dirname(cached_key_path)).mkdir(
+                parents=True, exist_ok=True
+            )
             with open(cached_key_path, "w") as f:
                 f.write(pem_key)
             log.info(f"Stored key at {cached_key_path}")
@@ -117,16 +125,17 @@ class PoeManager:
         status = self._get_status()
 
         def print_line(lst):
-            print(str("{:<20}" * len(lst)).format(*lst))
+            print(str("{:<15}" * len(lst)).format(*lst))
 
         columns = (
             "Port Num",
             "PoE Status",
-            "Power Consumption",
-            "Operational Status",
+            "Power Output",
+            "Operation",
             "Label",
         )
         print_line(columns)
+        print_line(["-" * len(c) for c in columns])
         for entry in status:
             vals = [entry[c] for c in columns if c in entry]
             idx = int(entry["Port Num"])
@@ -174,10 +183,8 @@ class PoeManager:
                         find_poe_val(bs, "pethPsePortAdminEnable", index)
                     ]
                 ),
-                "Power Consumption": find_poe_val(
-                    bs, "rlPethPsePortOutputPower", index
-                ),
-                "Operational Status": (
+                "Power Output": find_poe_val(bs, "rlPethPsePortOutputPower", index),
+                "Operation": (
                     {
                         "1": "Disabled",
                         "2": "Searching",
@@ -276,16 +283,36 @@ def main():
             format="%(levelname)s: %(message)s", level=log.DEBUG, force=True
         )
 
-    config_path = "config.yaml"
+    config_path = os.path.join(os.getenv("HOME"), ".config", "poe_ctrl", "config.yaml")
     try:
-        with open(config_path) as f:
+        with open(config_path, "r") as f:
             try:
                 config = yaml.safe_load(f)
             except yaml.YAMLError:
                 log.error("Unable to parse YAML config")
                 raise
     except FileNotFoundError:
-        log.error(f"Couldn't read config file at {config_path}")
+        pathlib.Path(os.path.dirname(config_path)).mkdir(parents=True, exist_ok=True)
+        with open(config_path, "w") as f:
+            f.write(
+                "#ip: 192.168.0.1\n"
+                "#username: admin\n"
+                "#password: admin\n"
+                "#labels:\n"
+                "#  1: foo\n"
+                "#  2: bar\n"
+                "#  3: baz\n"
+            )
+        log.error(
+            f"No configuration file found at {config_path}; writing a sample file."
+        )
+        log.error(
+            f"Please update {config_path} with your switch's info and re-run this program."
+        )
+        return 1
+
+    if not config:
+        log.error("Invalid config")
         return 1
 
     try:
@@ -301,22 +328,26 @@ def main():
     if not switch_reachable(ip):
         return 1
 
-    with LoginSession(ip, username, password) as session:
-        manager = PoeManager(ip, session)
+    try:
+        with LoginSession(ip, username, password) as session:
+            manager = PoeManager(ip, session)
 
-        p = args.port
+            p = args.port
 
-        if args.enable:
-            manager.enable_port(p)
-        elif args.disable:
-            manager.disable_port(p)
-        elif args.cycle:
-            manager.disable_port(p)
-            time.sleep(5)
-            manager.enable_port(p)
+            if args.enable:
+                manager.enable_port(p)
+            elif args.disable:
+                manager.disable_port(p)
+            elif args.cycle:
+                manager.disable_port(p)
+                time.sleep(5)
+                manager.enable_port(p)
 
-        if args.status:
-            manager.print_status(labels)
+            if args.status:
+                manager.print_status(labels)
+    except LoginException as e:
+        log.error("Login failed. Incorrect credentials?")
+        return 1
 
     return 0
 
