@@ -11,21 +11,21 @@ Manage the state of of Power-over-Ethernet (PoE) ports on Linksys LGS3XXP smart 
 
 Clone the git project:
 
-```console
+```sh
 git clone https://github.com/frestr/lgs3xxp-poectrl.git
 cd lgs3xxp-poectrl
 ```
 
 Set up a Python virtual environment:
 
-```console
+```sh
 virtualenv venv
 source venv/bin/activate
 ```
 
 Install the package:
 
-```console
+```sh
 pip install .
 ```
 
@@ -48,7 +48,7 @@ password: admin
 
 Finally, test that everything works:
 
-```console
+```sh
 poectrl --status
 ```
 
@@ -142,10 +142,10 @@ $ poectrl --port 6 --cycle
 ## Uninstalling
 
 1. Uninstall the package:
-   ```console
+   ```sh
    pip uninstall poectrl
    ```
 2. Remove the auxilliary files created during runtime:
-   ```console
+   ```sh
    rm -r ~/.config/poectrl ~/.cache/poectrl
    ```
