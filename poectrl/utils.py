@@ -16,8 +16,11 @@ def switch_reachable(hostname: str) -> bool:
             f"https://{hostname}/csd90d7adf/config/log_off_page.htm",
             verify=False,
         )
-    except requests.exceptions.ConnectionError:
-        log.error(f"Switch ({hostname}) is unreachable")
+    except requests.exceptions.ConnectionError as e:
+        log.error(
+            f"Unable to connect to switch ({hostname}). Run with -v for more details."
+        )
+        log.debug(e)
         return False
     return True
 
@@ -28,8 +31,9 @@ def load_config(config_path: str) -> dict:
         with open(config_path, "r") as f:
             try:
                 config = yaml.safe_load(f)
-            except yaml.YAMLError:
+            except yaml.YAMLError as e:
                 log.error("Unable to parse YAML config")
+                log.debug(e)
                 raise
     except FileNotFoundError:
         log.error(

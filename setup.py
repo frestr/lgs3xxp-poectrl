@@ -3,11 +3,11 @@ from setuptools import setup
 
 setup(
     name="poectrl",
-    version="1.0.0",
+    version="0.1.0",
     author="Fredrik Strupe",
     author_email="fredrik@strupe.net",
     url="https://github.com/frestr/poectrl",
-    description="Power-over-Ethernet (PoE) Control for LGS3XXP Switches",
+    description="Power-over-Ethernet (PoE) Port Control for LGS3XXP Switches",
     license="MIT",
     classifiers=[
         "Development Status :: 4 - Beta",

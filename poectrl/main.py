@@ -9,8 +9,8 @@ from . import login, manager, utils
 def main():
     # Define CLI arguments
     parser = argparse.ArgumentParser(
-        prog="poe_ctrl",
-        description="Remotely manage the state of PoE ports on a LGS308P switch",
+        prog="poectrl",
+        description="Manage the state of PoE ports on a LGS3XXP switch",
     )
     parser.add_argument("-v", "--verbose", action="store_true", help="Verbose output")
     parser.add_argument(
