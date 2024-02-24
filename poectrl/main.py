@@ -84,9 +84,8 @@ def main():
         )
 
     # Read config
-    config_path = os.path.join(os.getenv("HOME"), ".config", "poe_ctrl", "config.yaml")
     try:
-        config = utils.load_config(config_path)
+        config = utils.load_config(utils.get_config_path())
     except Exception:
         return 1
 

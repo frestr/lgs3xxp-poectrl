@@ -52,6 +52,16 @@ def load_config(config_path: str) -> dict:
         raise
 
     if not config:
-        log.error("Invalid config")
-        return Exception()
+        log.error(f"Invalid config ({config_path})")
+        raise Exception()
     return config
+
+
+def get_config_path() -> str:
+    """Get the path of the configuration file."""
+    return os.path.join(os.getenv("HOME"), ".config", "poectrl", "config.yaml")
+
+
+def get_cached_key_path(hostname: str) -> str:
+    """Get the path of the cached RSA key for the specified hostname."""
+    return os.path.join(os.getenv("HOME"), ".cache", "poectrl", f"{hostname}.pem")

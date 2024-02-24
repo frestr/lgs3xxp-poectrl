@@ -9,6 +9,8 @@ from Crypto.Cipher import PKCS1_v1_5
 from Crypto.PublicKey import RSA
 from Crypto.Random import random
 
+from . import utils
+
 
 class LoginException(Exception):
     """Login failed."""
@@ -99,9 +101,7 @@ class LoginSession:
                 )
                 return requests.Session.send(self, *a, **kw)
 
-        cached_key_path = os.path.join(
-            os.getenv("HOME"), ".cache", f"{self.hostname}.pem"
-        )
+        cached_key_path = utils.get_cached_key_path(self.hostname)
         try:
             with open(cached_key_path, "r") as f:
                 pem_key = f.read()
