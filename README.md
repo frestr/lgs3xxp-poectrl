@@ -1,7 +1,7 @@
 # LGS3XXP PoE Control
 
-Manage the state of of Power-over-Ethernet (PoE) ports on Linksys LGS3XXP smart switches
-(LGS308P, LGS318P, LGS326P) -- without having to use the Web UI.
+Manage the state of Power-over-Ethernet (PoE) ports on a Linksys LGS3XXP smart switch
+(LGS308P, LGS318P, LGS326P) -- without having to use the Web UI!
 
 > [!NOTE]
 > Only the LGS308P (8-port) model has been tested. Feel free to make a new issue on GitHub if you
@@ -9,7 +9,7 @@ Manage the state of of Power-over-Ethernet (PoE) ports on Linksys LGS3XXP smart 
 
 ## Setup
 
-Clone the git project:
+Clone the git repository:
 
 ```sh
 git clone https://github.com/frestr/lgs3xxp-poectrl.git
@@ -141,11 +141,14 @@ $ poectrl --port 6 --cycle
 
 ## Uninstalling
 
-1. Uninstall the package:
-   ```sh
-   pip uninstall poectrl
-   ```
-2. Remove the auxilliary files created during runtime:
-   ```sh
-   rm -r ~/.config/poectrl ~/.cache/poectrl
-   ```
+Uninstall the package:
+
+```sh
+pip uninstall poectrl
+```
+
+Remove the auxilliary files created during runtime:
+
+```sh
+rm -r ~/.config/poectrl ~/.cache/poectrl
+```
