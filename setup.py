@@ -6,7 +6,7 @@ setup(
     version="0.1.0",
     author="Fredrik Strupe",
     author_email="fredrik@strupe.net",
-    url="https://github.com/frestr/poectrl",
+    url="https://github.com/frestr/lgs3xxp-poectrl",
     description="Power-over-Ethernet (PoE) Port Control for LGS3XXP Switches",
     license="MIT",
     classifiers=[
