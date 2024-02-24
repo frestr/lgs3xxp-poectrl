@@ -1,8 +1,6 @@
-#!/usr/bin/env python
 import argparse
 import logging as log
 import os
-import sys
 import time
 
 from . import login, manager, utils
@@ -19,7 +17,8 @@ def main():
         "-s",
         "--status",
         action="store_true",
-        help="Print current status of PoE ports. If provided together with -e|-d|-c, will print status after update.",
+        help="Print current status of PoE ports. "
+        "If provided together with -e|-d|-c, will print status after update.",
     )
     port_group = parser.add_mutually_exclusive_group()
     port_group.add_argument(
@@ -29,7 +28,7 @@ def main():
         action="store",
         metavar="PORT_NUM",
         type=int,
-        help="Number of the port to operate on.",
+        help="Port number to operate on.",
     )
     port_group.add_argument(
         "-l",
@@ -38,7 +37,7 @@ def main():
         action="store",
         metavar="PORT_LABEL",
         type=str,
-        help="Label of the port to operate on",
+        help="Port label to operate on",
     )
     action_group = parser.add_mutually_exclusive_group()
     action_group.add_argument(
@@ -62,16 +61,18 @@ def main():
 
     # Validate CLI arguments
     args = parser.parse_args()
-    if not (args.status or args.port):
+    port_num_provided = args.port_num is not None
+    port_label_provided = args.port_label is not None
+    if not (args.status or port_num_provided or port_label_provided):
         parser.print_help()
         return 1
 
-    if (args.port_num or args.port_label) and not (
+    if (port_num_provided or port_label_provided) and not (
         args.enable or args.disable or args.cycle
     ):
         parser.error("Port action must be provided")
     if (args.enable or args.disable or args.cycle) and not (
-        args.port_num or args.port_label
+        port_num_provided or port_label_provided
     ):
         parser.error("Port number or label must be provided")
 
@@ -138,12 +139,8 @@ def main():
 
             if args.status:
                 m.print_status(labels)
-    except login.LoginException as e:
-        log.error("Login failed. Incorrect credentials?")
+    except (login.LoginException, manager.InvalidPortException) as e:
+        log.error(e)
         return 1
 
     return 0
-
-
-if __name__ == "__main__":
-    sys.exit(main())

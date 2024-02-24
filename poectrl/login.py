@@ -8,41 +8,50 @@ from bs4 import BeautifulSoup
 from Crypto.Cipher import PKCS1_v1_5
 from Crypto.PublicKey import RSA
 from Crypto.Random import random
-from urllib3.exceptions import InsecureRequestWarning
 
 
 class LoginException(Exception):
-    pass
+    """Login failed."""
 
 
 class LoginSession:
-    def __init__(self, hostname, username, password):
+    """Context object for managing switch login and logout."""
+
+    def __init__(self, hostname: str, username: str, password: str) -> None:
         self.hostname = hostname
         self.username = username
         self.password = password
         self.session = requests.Session()
 
-    def __enter__(self):
+    def __enter__(self) -> requests.Session:
+        """Log in by creating an authenticated session with the initialized credentials."""
         log.info("Logging in...")
         self._login()
         log.info("Logged in")
         return self.session
 
-    def __exit__(self, exc_type, exc_val, exc_tb):
+    def __exit__(self, exc_type, exc_val, exc_tb) -> None:
+        """Log out by terminating previously created authenticated session."""
         log.info("Logging out...")
         self._logout()
         log.info("Logged out")
 
-    def _login(self):
+    def _login(self) -> None:
         log.info("Fetching RSA key")
         rsa_key = self._get_rsa_key()
 
+        # Note on the switch's authentication protocol: This scheme of encrypting the credentials is
+        # completely redundant as it gives no protection against an active attacker and is
+        # vulnerable to replay attacks by a passive one. The only thing it protects against is
+        # leaking the plaintext password to a passive attacker if HTTP (as opposed to HTTPS, even
+        # with self-signed certificate) is being used.
         log.info("Encrypting login details")
         cipher = PKCS1_v1_5.new(rsa_key)
         plaintext = f"user={self.username}&password={self.password}&"
         ciphertext = cipher.encrypt(plaintext.encode("utf-8"))
 
-        sid = random.randint(10**10, 10**11)
+        # Another note: it's a pretty bad idea to have the client decide on the session ID value.
+        sid = random.randint(10**10, 10**11)  # 10-digit random number
         self.session.cookies.set("sessionID", f"UserId=127.0.0.1&-{sid}&")
         params = {
             "action": "login",
@@ -59,16 +68,20 @@ class LoginSession:
 
         bs = BeautifulSoup(response.text, features="xml")
         if bs.statusString.string != "OK":
-            raise LoginException()
+            raise LoginException("Login failed. Incorrect credentials?")
 
-    def _logout(self):
+    def _logout(self) -> None:
         url = f"https://{self.hostname}/csd90d7adf/config/logOff_message.htm"
         response = self.session.get(
             url,
             verify=False,
         )
 
-    def _get_rsa_key(self):
+    def _get_rsa_key(self) -> RSA.RsaKey:
+        """Fetch the switch's public RSA key.
+
+        Used for encrypting login credentials before sending them to the switch.
+        """
 
         class CurlyBracesSession(requests.Session):
             """Requests session that doesn't encode curly braces in URL"""

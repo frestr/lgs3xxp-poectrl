@@ -7,7 +7,8 @@ import yaml
 from urllib3.exceptions import InsecureRequestWarning
 
 
-def switch_reachable(hostname):
+def switch_reachable(hostname: str) -> bool:
+    """Check if the switch is reachable by making an HTTP request to the specified hostname."""
     # Disable warnings about self-signed https certificate (not something we can change)
     requests.packages.urllib3.disable_warnings(category=InsecureRequestWarning)
     try:
@@ -17,12 +18,12 @@ def switch_reachable(hostname):
         )
     except requests.exceptions.ConnectionError:
         log.error(f"Switch ({hostname}) is unreachable")
-        raise
         return False
     return True
 
 
-def load_config(config_path):
+def load_config(config_path: str) -> dict:
+    """Load configuration file from the specified path."""
     try:
         with open(config_path, "r") as f:
             try:
@@ -31,6 +32,9 @@ def load_config(config_path):
                 log.error("Unable to parse YAML config")
                 raise
     except FileNotFoundError:
+        log.error(
+            f"No configuration file found at {config_path}; writing a sample file."
+        )
         pathlib.Path(os.path.dirname(config_path)).mkdir(parents=True, exist_ok=True)
         with open(config_path, "w") as f:
             f.write(
@@ -42,9 +46,6 @@ def load_config(config_path):
                 "#  2: bar\n"
                 "#  3: baz\n"
             )
-        log.error(
-            f"No configuration file found at {config_path}; writing a sample file."
-        )
         log.error(
             f"Please update {config_path} with your switch's info and re-run this program."
         )
